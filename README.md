@@ -33,8 +33,8 @@ PHP example
             $key = "my_secret_key";
             $time = time();
             $valid_minutes = 120;
-            $hash = md5(sprintf(%s%s%s%s, $_SERVER['REMOTE_ADDR'], $key, $time, $valid_minutes));
-            $params = sprintf("serer_time=%s&hash_value=%s&validminutes=%s", $time, $hash, $validminutes);
+            $hash = md5(sprintf("%s%s%s%s", $_SERVER['REMOTE_ADDR'], $key, $time, $valid_minutes));
+            $params = sprintf("server_time=%s&hash_value=%s&validminutes=%s", $time, $hash, $valid_minutes);
             return base64_encode($params);
         }
 

@@ -25,8 +25,8 @@ public class ModuleAuth extends ModuleBase {
 
 	private class Client
 	{
-		public String ip;
-		public String query;
+		public String ip = "";
+		public String query = "";
 		public Client(IClient client)
 		{
 			ip = client.getIp();
@@ -57,17 +57,19 @@ public class ModuleAuth extends ModuleBase {
 	public void onConnect(IClient client, RequestFunction function,
 			AMFDataList params) {
 		Client myClient = new Client(client);
+		getLogger().info("onConnect ============================================");
 		if (!this.validateAuth(myClient)){
 			
-			getLogger().info("ModuleAuth: Invalid client (" + client.getIp() + ")");
 			client.rejectConnection();
 		}
 	}
 
 	public void onHTTPSessionCreate(IHTTPStreamerSession httpSession) {
 		Client myClient = new Client(httpSession);
+		getLogger().info("onHTTPSessionCreate ============================================");
 		if (!this.validateAuth(myClient)) {
 			httpSession.rejectSession();
+			httpSession.shutdown();
 		}
 	}
 
@@ -81,17 +83,28 @@ public class ModuleAuth extends ModuleBase {
 
 	
 	private boolean validateAuth(Client client){
+		if (client == null || client.query == null || client.query.length() == 0) {
+			return false;
+		}
 		Map<String, List<String>> queryParams = URLUtils.parseQueryStr(client.query, true);
 		String wms_auth = getMapValue(queryParams, "wmsAuth");
+		String valid_minutes = "";
+		String server_time = "";
+		String client_hash_value = "";
+		String server_hash_value = "";
 		if (wms_auth.length() > 0){
 			String sign = new String(Base64.decode(wms_auth));
 			long current_time = System.currentTimeMillis()/1000;
 			queryParams = URLUtils.parseQueryStr(sign, true);
 			if (queryParams.containsKey("validminutes") && queryParams.containsKey("server_time") && queryParams.containsKey("hash_value")){
-				String valid_minutes = getMapValue(queryParams, "validminutes");
-				String server_time = getMapValue(queryParams, "server_time");
-				String client_hash_value = getMapValue(queryParams, "hash_value");
-				String server_hash_value = client.ip+""+secret_key+""+server_time+""+valid_minutes;
+				try {
+					valid_minutes = Integer.toString(Integer.parseInt(getMapValue(queryParams, "validminutes")));
+					server_time = Integer.toString(Integer.parseInt(getMapValue(queryParams, "server_time")));
+					client_hash_value = getMapValue(queryParams, "hash_value");
+					server_hash_value = client.ip+""+secret_key+""+server_time+""+valid_minutes;
+				} catch (NumberFormatException e) {
+					return false;
+				}
 				server_hash_value = new String(DigestUtils.md5Hex(server_hash_value));
 				getLogger().info("---------------------------------------------------------");
 				getLogger().info("CLI HASH: "+client_hash_value);
