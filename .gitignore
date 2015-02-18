@@ -1,5 +1,9 @@
 *.class
-
+.externalToolBuilders
+bin
+.classpath
+.project
+build.xml
 # Package Files #
 *.jar
 *.war

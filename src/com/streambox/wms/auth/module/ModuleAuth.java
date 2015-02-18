@@ -1,6 +1,7 @@
 package com.streambox.wms.auth.module;
 
 import com.amazon.thirdparty.Base64;
+import com.wowza.util.URLUtils;
 import com.wowza.wms.application.*;
 import com.wowza.wms.amf.*;
 import com.wowza.wms.client.*;
@@ -11,7 +12,6 @@ import com.wowza.wms.rtp.model.*;
 import com.wowza.wms.httpstreamer.model.*;
 import com.wowza.wms.httpstreamer.cupertinostreaming.httpstreamer.*;
 import com.wowza.wms.httpstreamer.smoothstreaming.httpstreamer.*;
-import com.wowza.util.URLUtils;
 
 import java.io.IOException;
 import java.util.List;
@@ -20,19 +20,68 @@ import java.util.Map;
 import org.apache.commons.codec.digest.DigestUtils;
 import org.apache.commons.lang.ObjectUtils.Null;
 
+
 public class ModuleAuth extends ModuleBase {
+
+	private class Client
+	{
+		public String ip;
+		public String query;
+		public Client(IClient client)
+		{
+			ip = client.getIp();
+			query = client.getQueryStr();
+		}
+		
+		public Client(IHTTPStreamerSession client)
+		{
+			ip = client.getIpAddress();
+			query = client.getQueryStr();
+		}
+		
+		public Client(RTPSession client)
+		{
+			ip = client.getIp();
+			query = client.getQueryStr();
+		}
+	}
+	
+	protected String secret_key;
+	protected Client client;
+	
+    public void onAppStart(IApplicationInstance ai)
+    {
+    	secret_key = ai.getProperties().getPropertyStr("StreamAuthKey", "");
+    }
 	
 	public void onConnect(IClient client, RequestFunction function,
 			AMFDataList params) {
-		if (!this.validateAuth(client)){
+		Client myClient = new Client(client);
+		if (!this.validateAuth(myClient)){
+			
 			getLogger().info("ModuleAuth: Invalid client (" + client.getIp() + ")");
 			client.rejectConnection();
 		}
 	}
+
+	public void onHTTPSessionCreate(IHTTPStreamerSession httpSession) {
+		Client myClient = new Client(httpSession);
+		if (!this.validateAuth(myClient)) {
+			httpSession.rejectSession();
+		}
+	}
+
+	public void onRTPSessionCreate(RTPSession rtpSession) {
+		getLogger().info("onRTPSessionCreate: " + rtpSession.getSessionId());
+		Client myClient = new Client(rtpSession);
+		if (!this.validateAuth(myClient)) {
+			rtpSession.rejectSession();
+		}
+	}
+
 	
-	private boolean validateAuth(IClient client){
-		String secret_key = client.getAppInstance().getProperties().getPropertyStr("StreamAuthKey","");
-		Map<String, List<String>> queryParams = URLUtils.parseQueryStr(client.getQueryStr(), true);
+	private boolean validateAuth(Client client){
+		Map<String, List<String>> queryParams = URLUtils.parseQueryStr(client.query, true);
 		String wms_auth = getMapValue(queryParams, "wmsAuth");
 		if (wms_auth.length() > 0){
 			String sign = new String(Base64.decode(wms_auth));
@@ -42,7 +91,7 @@ public class ModuleAuth extends ModuleBase {
 				String valid_minutes = getMapValue(queryParams, "validminutes");
 				String server_time = getMapValue(queryParams, "server_time");
 				String client_hash_value = getMapValue(queryParams, "hash_value");
-				String server_hash_value = client.getIp()+""+secret_key+""+server_time+""+valid_minutes;
+				String server_hash_value = client.ip+""+secret_key+""+server_time+""+valid_minutes;
 				server_hash_value = new String(DigestUtils.md5Hex(server_hash_value));
 				getLogger().info("---------------------------------------------------------");
 				getLogger().info("CLI HASH: "+client_hash_value);
@@ -51,19 +100,19 @@ public class ModuleAuth extends ModuleBase {
 				getLogger().info("Valid minutes:"+ valid_minutes);
 				getLogger().info("---------------------------------------------------------");
 				if (current_time - Long.parseLong(server_time) > Integer.parseInt(valid_minutes)*60){
-					getLogger().info("ModuleAuth: current_time - server_time is more than valid_minutes (" + client.getIp() + ")");
+					getLogger().info("ModuleAuth: current_time - server_time is more than valid_minutes (" + client.ip + ")");
 					return false;
 				}
 				if (client_hash_value.equals(server_hash_value)){
-					getLogger().info("ModuleAuth: valid hash (" + client.getIp() + ")");
+					getLogger().info("ModuleAuth: valid hash (" + client.ip + ")");
 					return true;
 				} else {
-					getLogger().info("ModuleAuth: invalid hash (" + client.getIp() + ")");
+					getLogger().info("ModuleAuth: invalid hash (" + client.ip + ")");
 					return false;
 				}
 			}
 		} else {
-			getLogger().info("ModuleAuth: error parse first if (" + client.getIp() + ")");
+			getLogger().info("ModuleAuth: error parse first if (" + client.ip + ")");
 		}
 		return false;
 	}
