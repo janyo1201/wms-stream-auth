@@ -57,7 +57,6 @@ public class ModuleAuth extends ModuleBase {
 	public void onConnect(IClient client, RequestFunction function,
 			AMFDataList params) {
 		Client myClient = new Client(client);
-		getLogger().info("onConnect ============================================");
 		if (!this.validateAuth(myClient)){
 			
 			client.rejectConnection();
@@ -66,15 +65,12 @@ public class ModuleAuth extends ModuleBase {
 
 	public void onHTTPSessionCreate(IHTTPStreamerSession httpSession) {
 		Client myClient = new Client(httpSession);
-		getLogger().info("onHTTPSessionCreate ============================================");
 		if (!this.validateAuth(myClient)) {
 			httpSession.rejectSession();
-			httpSession.shutdown();
 		}
 	}
 
 	public void onRTPSessionCreate(RTPSession rtpSession) {
-		getLogger().info("onRTPSessionCreate: " + rtpSession.getSessionId());
 		Client myClient = new Client(rtpSession);
 		if (!this.validateAuth(myClient)) {
 			rtpSession.rejectSession();
@@ -93,7 +89,12 @@ public class ModuleAuth extends ModuleBase {
 		String client_hash_value = "";
 		String server_hash_value = "";
 		if (wms_auth.length() > 0){
-			String sign = new String(Base64.decode(wms_auth));
+			String sign;
+			try {
+				sign = new String(Base64.decode(wms_auth));
+			} catch (Exception e) {
+				return false;
+			}
 			long current_time = System.currentTimeMillis()/1000;
 			queryParams = URLUtils.parseQueryStr(sign, true);
 			if (queryParams.containsKey("validminutes") && queryParams.containsKey("server_time") && queryParams.containsKey("hash_value")){
@@ -102,9 +103,11 @@ public class ModuleAuth extends ModuleBase {
 					server_time = Integer.toString(Integer.parseInt(getMapValue(queryParams, "server_time")));
 					client_hash_value = getMapValue(queryParams, "hash_value");
 					server_hash_value = client.ip+""+secret_key+""+server_time+""+valid_minutes;
+					getLogger().info(client.ip);
 				} catch (NumberFormatException e) {
 					return false;
 				}
+				getLogger().info("SRV_HASH: "+server_hash_value);
 				server_hash_value = new String(DigestUtils.md5Hex(server_hash_value));
 				getLogger().info("---------------------------------------------------------");
 				getLogger().info("CLI HASH: "+client_hash_value);
@@ -113,19 +116,19 @@ public class ModuleAuth extends ModuleBase {
 				getLogger().info("Valid minutes:"+ valid_minutes);
 				getLogger().info("---------------------------------------------------------");
 				if (current_time - Long.parseLong(server_time) > Integer.parseInt(valid_minutes)*60){
-					getLogger().info("ModuleAuth: current_time - server_time is more than valid_minutes (" + client.ip + ")");
+					//getLogger().info("ModuleAuth: current_time - server_time is more than valid_minutes (" + client.ip + ")");
 					return false;
 				}
 				if (client_hash_value.equals(server_hash_value)){
-					getLogger().info("ModuleAuth: valid hash (" + client.ip + ")");
+					//getLogger().info("ModuleAuth: valid hash (" + client.ip + ")");
 					return true;
 				} else {
-					getLogger().info("ModuleAuth: invalid hash (" + client.ip + ")");
+					//getLogger().info("ModuleAuth: invalid hash (" + client.ip + ")");
 					return false;
 				}
 			}
 		} else {
-			getLogger().info("ModuleAuth: error parse first if (" + client.ip + ")");
+			//getLogger().info("ModuleAuth: error parse first if (" + client.ip + ")");
 		}
 		return false;
 	}
